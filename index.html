@@ -42389,6 +42389,12 @@ function guardarDB() { escribirLS(DB); }
 function aplicarTema() { let t = DB.tema || 'neon'; if (t === 'auto') t = 'neon'; document.documentElement.dataset.tema = t; }
 aplicarTema();
 const I18N_EN = {
+// código de ingreso del colegio
+'🔑 Código de ingreso del colegio': '🔑 School access code', 'Te lo da tu docente': 'Your teacher gives it to you',
+'Solo se pide esta vez. Así nadie de afuera del colegio puede crear una cuenta.': 'You only need it this time. This way nobody from outside the school can create an account.',
+'Escribe el código de ingreso del colegio. Te lo da tu docente.': 'Type the school access code. Your teacher gives it to you.',
+'El código de ingreso no es correcto. Pídeselo a tu docente.': 'The access code is not correct. Ask your teacher for it.',
+'Ese número no está en la lista de tu curso. Revisa tu grupo y tu número de lista, o habla con tu docente.': 'That number is not on your class list. Check your group and list number, or talk to your teacher.',
 // navegación y general
 'Aprender': 'Learn', 'Practicar': 'Practice', 'Simulacro': 'Mock test', 'Progreso': 'Progress',
 'Entrar': 'Sign in', 'Empezar': 'Start', 'Volver': 'Back', 'Cerrar': 'Close', 'Salir': 'Exit', 'Cerrar sesión': 'Sign out',
@@ -43101,19 +43107,22 @@ function vApodo(curso, lista, grado, pin, r) {
   pintar(`<div class="ingreso"><div class="mascota">🎉</div><h1>¡Bienvenido!</h1>
     ${sugerido ? `<p class="sub">Tu docente te registró como:</p><div class="caja" style="text-align:center;font-size:22px;font-weight:900">${esc(sugerido)}</div><p class="sub">¿Eres tú? Si hay un error, corrígelo.</p>` : '<p class="sub">Escribe tu nombre y tu apellido.</p>'}
     <label for="ap">Nombre y apellido</label><input id="ap" maxlength="40" autocomplete="name" value="${esc(sugerido)}" placeholder="Ej.: Valentina Pérez">
+    ${r && r.pideCodigo ? '<label for="codIng">🔑 Código de ingreso del colegio</label><input id="codIng" maxlength="20" autocomplete="off" autocapitalize="characters" style="text-transform:uppercase;letter-spacing:.08em;font-weight:800" placeholder="Te lo da tu docente"><p class="nota" style="text-align:left;margin-top:6px">Solo se pide esta vez. Así nadie de afuera del colegio puede crear una cuenta.</p>' : ''}
     <div style="height:18px"></div><button class="btn verde" id="listo">${sugerido ? 'Sí, soy yo' : 'Empezar'}</button>
     <div style="text-align:center;margin-top:12px"><button class="lnk" id="atras">Volver</button></div></div>`);
   $('#atras').onclick = () => vIngreso();
   $('#listo').onclick = () => {
     const apodo = $('#ap').value.trim().replace(/\s+/g, ' ').slice(0, 40); const id = curso + '-' + lista;
     if (apodo.length < 3 || !/\s/.test(apodo)) { toast('Escribe tu nombre y tu apellido.'); return; }
+    const codigo = $('#codIng') ? $('#codIng').value.trim() : '';
+    if ($('#codIng') && !codigo) { toast('Escribe el código de ingreso del colegio. Te lo da tu docente.'); $('#codIng').focus(); return; }
     S = nuevoEstado(curso, lista, grado, apodo);
     if (!Back.hay()) { SES = { id }; guardarEstado(); return iniciarSesion(); }
     $('#listo').disabled = true;
-    Back.llamar('registrar', { curso, lista, grado, pin, apodo }).then(rr => {
+    Back.llamar('registrar', { curso, lista, grado, pin, apodo, codigo }).then(rr => {
       SES = { id, token: rr.token, temas: rr.temas || {}, contenido: (rr.contenido || []).map(unidadDeProfe), ajustes: rr.ajustes || {} };
       DB.cuentas[id] = Object.assign(DB.cuentas[id] || {}, { ses: { token: rr.token, temas: SES.temas, contenidoRaw: rr.contenido || [], ajustes: SES.ajustes } }); guardarEstado(); sincronizar(); iniciarSesion();
-    }).catch(e => { $('#listo').disabled = false; toast(/existe/i.test(e.message) ? 'Ese número de lista ya está registrado en tu curso. Revisa tus datos o habla con tu docente.' : 'No se pudo registrar. Revisa tu internet.'); });
+    }).catch(e => { S = null; $('#listo').disabled = false; const m = (e && e.message) || ''; toast(/existe/i.test(m) ? 'Ese número de lista ya está registrado en tu curso. Revisa tus datos o habla con tu docente.' : /código/i.test(m) ? 'El código de ingreso no es correcto. Pídeselo a tu docente.' : /lista oficial/i.test(m) ? 'Ese número no está en la lista de tu curso. Revisa tu grupo y tu número de lista, o habla con tu docente.' : 'No se pudo registrar. Revisa tu internet.', 4500); });
   };
 }
 function iniciarSesion() {
@@ -43604,6 +43613,13 @@ function pintarTab() {
       $('#roster').value.split(/\r?\n/).forEach(l => { if (!l.trim()) return; const m = l.match(/^\s*(\d{1,2})[\s.;,:\t-]+(.+?)\s*$/); if (m) nombres[+m[1]] = m[2].replace(/[\t;]+/g, ' ').replace(/\s+/g, ' '); else malas++; });
       if (!Object.keys(nombres).length) return toast('No encontré líneas con número y nombre.');
       docLlamar('cargarLista', { curso: DP.curso, nombres }).then(() => { toast('Lista guardada: ' + Object.keys(nombres).length + ' estudiantes' + (malas ? ' (' + malas + ' líneas no se entendieron)' : '') + '.'); cargarCurso(); }).catch(() => toast('No se pudo guardar.')); };
+    if (!DOC.local) {
+      const cb = document.createElement('div'); cb.className = 'caja'; cb.style.marginTop = '14px';
+      cb.innerHTML = `<h3>🔑 Código de ingreso del colegio</h3><p class="nota" style="text-align:left">Se pide solo la primera vez que un estudiante se registra, para que nadie de afuera del colegio pueda crear una cuenta. Es el mismo para todo el colegio: cámbialo solo cuando la institución lo decida. Si lo dejas vacío, no se pide. Además, si el curso tiene su lista cargada, solo se pueden registrar los números de esa lista.</p><input id="codi" maxlength="20" autocomplete="off" style="text-transform:uppercase;letter-spacing:.08em;font-weight:800" placeholder="Ej.: BA2026"><div style="height:8px"></div><button class="btn borde" id="gcodi">Guardar código</button>`;
+      c.appendChild(cb);
+      docLlamar('verCodigo', {}).then(r => { const i = $('#codi'); if (i) i.value = r.codigo || ''; }).catch(() => { const i = $('#codi'); if (i) i.placeholder = 'Actualiza el servidor para usar esta opción'; });
+      $('#gcodi').onclick = () => { const v = $('#codi').value.trim().toUpperCase().replace(/\s+/g, ''); docLlamar('cambiarCodigo', { codigo: v }).then(() => toast(v ? 'Código guardado: ' + v + '. Los estudiantes nuevos lo necesitan para registrarse.' : 'Listo: ya no se pide código.', 4500)).catch(() => toast('No se pudo guardar. ¿Ya actualizaste el servidor?')); };
+    }
     c.querySelectorAll('[data-pin]').forEach(b => b.onclick = () => { if (b.dataset.ok) { docLlamar('reiniciarPin', { id: b.dataset.pin }).then(() => toast('PIN reiniciado: el estudiante crea uno nuevo al entrar.')); b.textContent = '✓'; } else { b.dataset.ok = 1; b.textContent = '¿Seguro?'; } });
   } else if (DP.tab === 'temas') {
     const t = (DP.temas[grado] || {})[area] || [];
